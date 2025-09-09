@@ -1,0 +1,21 @@
+name: Renew LG TV Dev Mode
+
+on:
+  schedule:
+    # Lên lịch chạy mỗi tuần một lần (ví dụ: 0h sáng thứ Hai)
+    # Bạn có thể thay đổi để phù hợp với nhu cầu của bạn.
+    # Cron job: phút, giờ, ngày-tháng, tháng, ngày-trong-tuần
+    # Ví dụ: 0 0 * * 1 (0h sáng, mỗi thứ Hai hàng tuần)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    # Cho phép bạn chạy thủ công bất cứ lúc nào từ tab Actions
+
+jobs:
+  renew_session:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send renewal request
+        env:
+          LG_TOKEN: ${{ secrets.LG_DEVMODE_TOKEN }}
+        run: |
+          curl "https://developer.lge.com/secure/ResetDevModeSession.dev?sessionToken=$LG_TOKEN"
