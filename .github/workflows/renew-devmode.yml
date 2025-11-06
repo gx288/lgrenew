@@ -1,23 +1,21 @@
 name: Renew LG TV Dev Mode
-
 on:
   schedule:
-    # Chạy mỗi giờ (0 phút của mỗi giờ) — bạn có thể đổi thành '0 0 * * 1' để chạy mỗi thứ Hai lúc 0h
-    - cron: '0 * * * *'
+    - cron: '0 * * * *'  # Mỗi giờ đúng phút 0
   workflow_dispatch:
 
 jobs:
   renew_session:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Cần quyền ghi để push log
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Send renewal request & log result
+      - name: Send renewal request & update log (max 1000 lines, newest on top)
         env:
           LG_TOKEN: ${{ secrets.LG_DEVMODE_TOKEN }}
         run: |
@@ -26,21 +24,34 @@ jobs:
           
           # Gửi request gia hạn
           RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/response_body "https://developer.lge.com/secure/ResetDevModeSession.dev?sessionToken=$LG_TOKEN")
-          HTTP_STATUS=$RESPONSE
+          HTTP_STATUS=${RESPONSE: -3}  # Lấy 3 chữ số cuối (HTTP code)
           BODY=$(cat /tmp/response_body)
 
-          # Tạo nội dung log
-          LOG_ENTRY="[$TIMESTAMP] HTTP $HTTP_STATUS | Token: ${LG_TOKEN:0:8}... | Response: $BODY"
+          # Tạo dòng log mới
+          NEW_LOG="[$TIMESTAMP] HTTP $HTTP_STATUS | Token: ${LG_TOKEN:0:8}... | Response: $BODY"
 
-          # Ghi vào log.txt (nếu file chưa tồn tại thì tạo mới)
-          echo "$LOG_ENTRY" >> log.txt
+          # Đảm bảo file log.txt tồn tại (nếu chưa có thì tạo rỗng)
+          touch log.txt
 
-          echo "Đã ghi log: $LOG_ENTRY"
+          # Đọc nội dung hiện tại vào mảng, thêm dòng mới lên đầu
+          mapfile -t lines < log.txt
+          lines=("$NEW_LOG" "${lines[@]}")
+
+          # Giữ tối đa 1000 dòng (cắt bớt từ cuối nếu vượt)
+          if [ ${#lines[@]} -gt 1000 ]; then
+            lines=("${lines[@]:0:1000}")
+          fi
+
+          # Ghi lại vào file (dòng mới nhất ở trên cùng)
+          printf "%s\n" "${lines[@]}" > log.txt
+
+          echo "Đã cập nhật log (tổng ${#lines[@]} dòng, mới nhất ở đầu)"
+          echo "Log mới nhất: $NEW_LOG"
 
       - name: Commit and push log.txt
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add log.txt
-          git commit -m "Auto update log: $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          git commit -m "Auto renew + update log: $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
           git push
